@@ -29,10 +29,13 @@ public class ESPClientHandler implements Runnable{
     private Stack<Map.Entry<String, String>> results;
     private DisconnectCallback disconnectCallback;
 
-    private Lock requestLock, resultLock;
+    private Lock requestLock, resultLock, finishLock;
+
+    private boolean finished = false;
     public ESPClientHandler(Socket client, DisconnectCallback callback) {
         this.requestLock = new ReentrantLock();
         this.resultLock = new ReentrantLock();
+        this.finishLock = new ReentrantLock();
         this.commands = new HashMap<>();
         this.requests = new LinkedList<>();
         this.disconnectCallback = callback;
@@ -58,9 +61,15 @@ public class ESPClientHandler implements Runnable{
         return this.id;
     }
     public void disconnect() throws IOException{
+
+        System.out.println("Exiting service for unused or older version of Client " + this.getID() + "");
+
         this.clientOutputStream.write(COMMAND_DISCONNECT);
         this.client.close();
         this.disconnectCallback.onDisconnect(this.id);
+        this.finishLock.lock();
+        finished = true;
+        this.finishLock.unlock();
     }
 
     public void refresh() throws IOException {
@@ -70,9 +79,11 @@ public class ESPClientHandler implements Runnable{
 
         StringBuilder command = new StringBuilder();
         boolean stringReceived = false;
-        byte next = (byte) this.clientInputStream.read();
+        int commands = this.clientInputStream.read();
 
-        while(this.clientInputStream.available() >= 0){
+
+        while(commands > 0){
+            byte next = (byte) this.clientInputStream.read();
             if(!stringReceived){
                 if(next != MESSAGE_PAUSE) {
                     command.append(new String(new byte[]{next}, Charset.defaultCharset()));
@@ -85,9 +96,8 @@ public class ESPClientHandler implements Runnable{
                 this.commands.put(command.toString(), next);
                 command = new StringBuilder();
                 stringReceived = false;
+                commands--;
             }
-
-            next = (byte) this.clientInputStream.read();
         }
 
         this.commands.put("disconnect", COMMAND_DISCONNECT);
@@ -111,6 +121,7 @@ public class ESPClientHandler implements Runnable{
         }
         return false;
     }
+
     public void write(String command, byte... bytes) throws IOException {
         if(this.commands.containsKey(command)){
             byte indicator = this.commands.get(command);
@@ -173,6 +184,14 @@ public class ESPClientHandler implements Runnable{
                     }
                     this.write(command);
                 }
+
+                this.finishLock.lock();
+                if(this.finished){
+                    this.finishLock.unlock();
+                    break;
+                }
+                this.finishLock.unlock();
+
             } catch (Exception e){
                 e.printStackTrace();
             }

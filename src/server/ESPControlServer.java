@@ -84,7 +84,15 @@ public class ESPControlServer implements Runnable{
             while(true){
                 ESPClientHandler clientHandler = new ESPClientHandler(espSocket.accept(), this::removeHandler);
                 this.handlerLock.lock();
+
+                if(activeHandlers.containsKey(clientHandler.getID())) {
+                    activeHandlers.get(clientHandler.getID()).disconnect();
+                }
+
                 activeHandlers.put(clientHandler.getID(), clientHandler);
+
+                System.out.println("Active Handlers: " + activeHandlers.size());
+
                 this.handlerLock.unlock();
                 pool.execute(clientHandler);
             }
