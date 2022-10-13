@@ -92,7 +92,7 @@ public class ESPClientHandler implements Runnable{
                     stringReceived = true;
                 }
             } else {
-                System.out.println("Received Command " + command.toString() + ":" + next);
+                System.out.println("Received Command " + command + ":" + next);
                 this.commands.put(command.toString(), next);
                 command = new StringBuilder();
                 stringReceived = false;

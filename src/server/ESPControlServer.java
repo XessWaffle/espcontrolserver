@@ -68,10 +68,18 @@ public class ESPControlServer implements Runnable{
 
         this.handlerLock.unlock();
     }
+
     public void removeHandler(byte id){
         this.handlerLock.lock();
         this.activeHandlers.remove(id);
         this.handlerLock.unlock();
+    }
+
+    public boolean hasHandler(byte id){
+        this.handlerLock.lock();
+        boolean ret = this.activeHandlers.containsKey(id);
+        this.handlerLock.unlock();
+        return ret;
     }
 
 

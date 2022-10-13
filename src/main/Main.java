@@ -1,35 +1,61 @@
 package main;
 
-import javafx.application.Application;
-import javafx.fxml.FXMLLoader;
-import javafx.scene.Scene;
-import javafx.stage.Stage;
 import server.ESPControlServer;
+import java.util.Scanner;
 
-import java.io.IOException;
 
-public class Main extends Application {
+public class Main {
+
+    static byte currentId;
+    static ESPControlServer server;
 
     public static void main(String[] args) {
+        // Run GUI codes in the Event-Dispatching thread for thread safety
+
+        Scanner scan = new Scanner(System.in);
+
         try{
-            ESPControlServer server = new ESPControlServer();
+            server = new ESPControlServer();
 
             Thread service = new Thread(server);
             service.start();
-        } catch(Exception e){
+        } catch (Exception e){
             e.printStackTrace();
+            return;
         }
 
+        while(true){
+            String next = scan.nextLine();
 
-        launch(args);
+            if(next.contains("local")){
+                if(next.contains("switch")){
+                    handleLocalSwitch(next);
+                } else if(next.contains("disconnect")){
+                    handleLocalDisconnect(next);
+                }
+
+            } else {
+
+            }
+        }
     }
 
-    @Override
-    public void start(Stage stage) throws IOException {
-        FXMLLoader fxmlLoader = new FXMLLoader(Main.class.getResource("/hello-view.fxml"));
-        Scene scene = new Scene(fxmlLoader.load(), 320, 240);
-        stage.setTitle("Hello!");
-        stage.setScene(scene);
-        stage.show();
+    public static void handleLocalSwitch(String next){
+        try {
+            byte toVerify = Byte.valueOf(next.split(" ")[1]);
+
+            if(server.hasHandler(toVerify)){
+                currentId  = toVerify;
+                System.out.println("Now talking to Client " + currentId);
+            }
+
+        } catch(Exception e){
+            System.out.println("Incorrect client id provided, could not switch context!");
+        }
     }
+
+    public static void handleLocalDisconnect(String next){
+
+    }
+
 }
