@@ -70,27 +70,36 @@ public class ESPClientHandler implements Runnable{
 
         StringBuilder command = new StringBuilder();
         boolean stringReceived = false;
-        while(this.clientInputStream.available() > 0){
-            byte next = (byte) this.clientInputStream.read();
+        byte next = (byte) this.clientInputStream.read();
 
+        while(this.clientInputStream.available() >= 0){
             if(!stringReceived){
                 if(next != MESSAGE_PAUSE) {
                     command.append(new String(new byte[]{next}, Charset.defaultCharset()));
+                    //System.out.println("Waiting for info..." + command.toString() + ":" + this.clientInputStream.available());
                 } else if(next == MESSAGE_PAUSE) {
                     stringReceived = true;
                 }
             } else {
+                System.out.println("Received Command " + command.toString() + ":" + next);
                 this.commands.put(command.toString(), next);
                 command = new StringBuilder();
+                stringReceived = false;
             }
+
+            next = (byte) this.clientInputStream.read();
         }
 
         this.commands.put("disconnect", COMMAND_DISCONNECT);
         this.commands.put("refresh", COMMAND_REFRESH);
     }
 
-    public Map.Entry<String, String> pollResult() throws EmptyStackException {
-        return results.pop();
+    public Map.Entry<String, String> pollResult() {
+
+        if(results.size() > 0){
+            return results.pop();
+        }
+        return null;
     }
     public boolean checkReserved(String command) throws IOException {
         if(command.equals("disconnect")) {
@@ -103,15 +112,7 @@ public class ESPClientHandler implements Runnable{
         return false;
     }
     public void write(String command, byte... bytes) throws IOException {
-
-        if(command.equals("disconnect")) {
-            this.disconnect();
-        } else if(command.equals("refresh")){
-            this.refresh();
-        }
-
         if(this.commands.containsKey(command)){
-
             byte indicator = this.commands.get(command);
             if((indicator & READ_MASK) == 0) {
                 this.clientOutputStream.write(this.commands.get(command));
