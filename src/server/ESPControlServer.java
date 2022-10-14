@@ -2,6 +2,7 @@ package server;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -18,6 +19,7 @@ public class ESPControlServer implements Runnable{
     private final ExecutorService pool;
     private HashMap<Byte, ESPClientHandler> activeHandlers;
     private Lock handlerLock;
+
 
     public ESPControlServer() throws IOException{
 
@@ -58,12 +60,12 @@ public class ESPControlServer implements Runnable{
         return ret;
     }
 
-    public void addRequest(String command, byte id){
+    public void addRequest(String command, byte id, ByteBuffer write){
         this.handlerLock.lock();
         ESPClientHandler clientHandler = this.activeHandlers.get(id);
 
         if(clientHandler != null){
-            clientHandler.addRequest(command);
+            clientHandler.addRequest(command, write);
         }
 
         this.handlerLock.unlock();
@@ -82,6 +84,19 @@ public class ESPControlServer implements Runnable{
         return ret;
     }
 
+    public void shutdown() throws IOException{
+        this.handlerLock.lock();
+        pool.shutdown();
+
+        for(ESPClientHandler in: this.activeHandlers.values()){
+            in.disconnect();
+        }
+
+        pool.shutdownNow();
+        this.handlerLock.unlock();
+
+    }
+
 
 
     public void run() {
@@ -89,7 +104,7 @@ public class ESPControlServer implements Runnable{
         System.out.println("Starting server " + this.espSocket.getInetAddress() +  " on port " + this.espSocket.getLocalPort());
 
         try{
-            while(true){
+            while(!pool.isShutdown()){
                 ESPClientHandler clientHandler = new ESPClientHandler(espSocket.accept(), this::removeHandler);
                 this.handlerLock.lock();
 

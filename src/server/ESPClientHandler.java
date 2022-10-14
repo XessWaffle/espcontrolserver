@@ -2,6 +2,7 @@ package server;
 
 import java.io.*;
 import java.net.Socket;
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
@@ -25,7 +26,7 @@ public class ESPClientHandler implements Runnable{
     private InputStream clientInputStream;
 
     private HashMap<String, Byte> commands;
-    private Queue<String> requests;
+    private Queue<Map.Entry<String, ByteBuffer>> requests;
     private Stack<Map.Entry<String, String>> results;
     private DisconnectCallback disconnectCallback;
 
@@ -38,6 +39,7 @@ public class ESPClientHandler implements Runnable{
         this.finishLock = new ReentrantLock();
         this.commands = new HashMap<>();
         this.requests = new LinkedList<>();
+        this.results = new Stack<>();
         this.disconnectCallback = callback;
 
         this.client = client;
@@ -128,10 +130,9 @@ public class ESPClientHandler implements Runnable{
             if((indicator & READ_MASK) == 0) {
                 this.clientOutputStream.write(this.commands.get(command));
                 if (bytes.length > 0) {
+                    System.out.println(Arrays.toString(bytes));
                     this.clientOutputStream.write(bytes);
                 }
-            } else {
-                throw new IOException("Bad Instruction");
             }
         }
     }
@@ -141,23 +142,21 @@ public class ESPClientHandler implements Runnable{
 
             byte indicator = this.commands.get(command);
 
-            if((indicator & READ_MASK) > 0) {
+            if((indicator & READ_MASK) < 0) {
                 this.clientOutputStream.write(indicator);
                 BufferedReader clientInput = new BufferedReader(new InputStreamReader(this.clientInputStream));
 
                 return clientInput.readLine();
 
-            } else {
-                throw new IOException("Bad Instruction");
             }
         }
 
         return null;
     }
 
-    public void addRequest(String request){
+    public void addRequest(String request, ByteBuffer buffer){
         this.requestLock.lock();
-        requests.add(request);
+        requests.add(new AbstractMap.SimpleEntry<String, ByteBuffer>(request, buffer));
         this.requestLock.unlock();
     }
 
@@ -166,10 +165,14 @@ public class ESPClientHandler implements Runnable{
             try{
                 this.requestLock.lock();
 
+                Map.Entry<String, ByteBuffer> commandPair = null;
                 String command = null;
+                ByteBuffer buffer = null;
 
                 if(!this.requests.isEmpty()){
-                    command = this.requests.poll();
+                    commandPair = this.requests.poll();
+                    command = commandPair.getKey();
+                    buffer = commandPair.getValue();
                 }
 
                 this.requestLock.unlock();
@@ -177,12 +180,11 @@ public class ESPClientHandler implements Runnable{
                 if(command != null && !this.checkReserved(command)) {
                     String resPacket = this.read(command);
                     if(resPacket != null){
-
                         this.resultLock.lock();
                         this.results.push(new AbstractMap.SimpleEntry<String, String>(command, resPacket));
                         this.resultLock.unlock();
                     }
-                    this.write(command);
+                    this.write(command, buffer.array());
                 }
 
                 this.finishLock.lock();
