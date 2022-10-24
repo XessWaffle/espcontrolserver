@@ -66,7 +66,7 @@ public class Main {
                     buffer.order(ByteOrder.LITTLE_ENDIAN);
 
                     for (int i = 1; i < check.length; i++) {
-                        buffer.putShort(Short.parseShort(check[i]));
+                        buffer.putInt(Integer.parseInt(check[i]));
                     }
 
                     ByteBuffer trueBuffer = ByteBuffer.allocate(buffer.position());
