@@ -19,6 +19,8 @@ public class ESPClientHandler implements Runnable{
     public static final byte COMMAND_REFRESH = (byte) 0xFF;
     public static final byte COMMAND_DISCONNECT = (byte) 0xFE;
 
+    public static final byte COMMAND_STREAM = (byte) 0xFD;
+
     private byte id;
 
     private Socket client;
@@ -32,7 +34,7 @@ public class ESPClientHandler implements Runnable{
 
     private Lock requestLock, resultLock, finishLock;
 
-    private boolean finished = false;
+    private boolean finished = false, streaming = false;
     public ESPClientHandler(Socket client, DisconnectCallback callback) {
         this.requestLock = new ReentrantLock();
         this.resultLock = new ReentrantLock();
@@ -83,7 +85,6 @@ public class ESPClientHandler implements Runnable{
         boolean stringReceived = false;
         int commands = this.clientInputStream.read();
 
-
         while(commands > 0){
             byte next = (byte) this.clientInputStream.read();
             if(!stringReceived){
@@ -104,6 +105,7 @@ public class ESPClientHandler implements Runnable{
 
         this.commands.put("disconnect", COMMAND_DISCONNECT);
         this.commands.put("refresh", COMMAND_REFRESH);
+        this.commands.put("stream", COMMAND_STREAM);
     }
 
     public Map.Entry<String, String> pollResult() {
@@ -120,6 +122,8 @@ public class ESPClientHandler implements Runnable{
         } else if(command.equals("refresh")){
             this.refresh();
             return true;
+        } else if(command.equals("stream")){
+            this.streaming = !this.streaming;
         }
         return false;
     }
@@ -154,6 +158,14 @@ public class ESPClientHandler implements Runnable{
         return null;
     }
 
+    public String readStream() throws IOException{
+        if(this.clientInputStream.available() > 0){
+            BufferedReader clientInput = new BufferedReader(new InputStreamReader(this.clientInputStream));
+            return clientInput.readLine();
+        }
+        return null;
+    }
+
     public void addRequest(String request, ByteBuffer buffer){
         this.requestLock.lock();
         requests.add(new AbstractMap.SimpleEntry<String, ByteBuffer>(request, buffer));
@@ -178,7 +190,7 @@ public class ESPClientHandler implements Runnable{
                 this.requestLock.unlock();
 
                 if(command != null && !this.checkReserved(command)) {
-                    String resPacket = this.read(command);
+                    String resPacket = streaming ? this.readStream() : this.read(command);
                     if(resPacket != null){
                         this.resultLock.lock();
                         this.results.push(new AbstractMap.SimpleEntry<String, String>(command, resPacket));
