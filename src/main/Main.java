@@ -4,6 +4,7 @@ import server.ESPControlServer;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.Scanner;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -58,20 +59,14 @@ public class Main {
                 } else {
 
                     String[] check = next.split(" ");
-
-                    ByteBuffer buffer = ByteBuffer.allocate(MAX_BUFFER);
-                    buffer.order(ByteOrder.LITTLE_ENDIAN);
+                    ArrayList<Integer> params = new ArrayList<>();
 
                     for (int i = 1; i < check.length; i++) {
-                        buffer.putInt(Integer.parseInt(check[i]));
+                        params.add(Integer.parseInt(check[i]));
                     }
 
-                    ByteBuffer trueBuffer = ByteBuffer.allocate(buffer.position());
-
-                    trueBuffer.put(0, buffer, 0, buffer.position());
-
                     serverLock.lock();
-                    server.addRequest(check[0], currentId, trueBuffer);
+                    server.addRequest(check[0], currentId, params);
                     serverLock.unlock();
                 }
             }

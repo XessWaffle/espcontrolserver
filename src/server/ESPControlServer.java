@@ -3,6 +3,8 @@ package server;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -69,6 +71,32 @@ public class ESPControlServer implements Runnable{
         }
 
         this.handlerLock.unlock();
+    }
+
+    public void addRequest(String command, byte id, int... data){
+        ByteBuffer buffer = ByteBuffer.allocate(300);
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
+
+        for(int i : data){
+            buffer.putInt(i);
+        }
+        ByteBuffer trueBuffer = ByteBuffer.allocate(buffer.position());
+        trueBuffer.put(0, buffer, 0, buffer.position());
+
+        this.addRequest(command, id, trueBuffer);
+    }
+
+    public void addRequest(String command, byte id, ArrayList<Integer> data){
+        ByteBuffer buffer = ByteBuffer.allocate(300);
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
+
+        for(int i : data){
+            buffer.putInt(i);
+        }
+        ByteBuffer trueBuffer = ByteBuffer.allocate(buffer.position());
+        trueBuffer.put(0, buffer, 0, buffer.position());
+
+        this.addRequest(command, id, trueBuffer);
     }
 
     public void removeHandler(byte id){
