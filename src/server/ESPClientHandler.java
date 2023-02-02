@@ -7,6 +7,8 @@ import java.nio.charset.Charset;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.*;
+import java.util.logging.Formatter;
 
 public class ESPClientHandler implements Runnable{
 
@@ -14,12 +16,20 @@ public class ESPClientHandler implements Runnable{
         void onDisconnect(byte id);
     }
 
+    public class LogFormatter extends Formatter {
+        @Override
+        public String format(LogRecord message) {
+            StringBuffer sb = new StringBuffer();
+            sb.append(message.getMessage() + "\n");
+            return sb.toString();
+        }
+    }
+
     public static final byte READ_MASK = (byte) (0x1 << 7);
+    public static final byte STREAM_MASK = (byte) (0x1 << 7);
     public static final byte MESSAGE_PAUSE = (byte) 0xFF;
     public static final byte COMMAND_REFRESH = (byte) 0xFF;
     public static final byte COMMAND_DISCONNECT = (byte) 0xFE;
-
-    public static final byte COMMAND_STREAM = (byte) 0xFD;
 
     private byte id;
 
@@ -33,6 +43,8 @@ public class ESPClientHandler implements Runnable{
     private DisconnectCallback disconnectCallback;
 
     private Lock requestLock, resultLock, finishLock;
+
+    private Logger logger;
 
     private boolean finished = false, streaming = false;
     public ESPClientHandler(Socket client, DisconnectCallback callback) {
@@ -51,8 +63,15 @@ public class ESPClientHandler implements Runnable{
             this.clientInputStream = client.getInputStream();
 
             id = (byte) this.clientInputStream.read();
+            this.streaming = (this.id & STREAM_MASK) < 0;
 
-            this.refresh();
+            if(!this.streaming)
+                this.refresh();
+            this.logger = Logger.getLogger("Client#" + id);
+            this.logger.setUseParentHandlers(false);
+            FileHandler logFileHandler = new FileHandler("./Client_" + id + ".txt");
+            this.logger.addHandler(logFileHandler);
+            logFileHandler.setFormatter(new LogFormatter());
 
         } catch (Exception e){
             e.printStackTrace();
@@ -105,7 +124,6 @@ public class ESPClientHandler implements Runnable{
 
         this.commands.put("disconnect", COMMAND_DISCONNECT);
         this.commands.put("refresh", COMMAND_REFRESH);
-        this.commands.put("stream", COMMAND_STREAM);
     }
 
     public Map.Entry<String, String> pollResult() {
@@ -166,6 +184,7 @@ public class ESPClientHandler implements Runnable{
         return null;
     }
 
+
     public void addRequest(String request, ByteBuffer buffer){
         this.requestLock.lock();
         requests.add(new AbstractMap.SimpleEntry<String, ByteBuffer>(request, buffer));
@@ -175,28 +194,40 @@ public class ESPClientHandler implements Runnable{
     public void run() {
         while(true){
             try{
-                this.requestLock.lock();
-
-                Map.Entry<String, ByteBuffer> commandPair = null;
+                String resPacket = null;
                 String command = null;
-                ByteBuffer buffer = null;
 
-                if(!this.requests.isEmpty()){
-                    commandPair = this.requests.poll();
-                    command = commandPair.getKey();
-                    buffer = commandPair.getValue();
+                if(!this.streaming) {
+                    this.requestLock.lock();
+
+                    Map.Entry<String, ByteBuffer> commandPair;
+                    ByteBuffer buffer = null;
+
+                    if (!this.requests.isEmpty()) {
+                        commandPair = this.requests.poll();
+                        command = commandPair.getKey();
+                        buffer = commandPair.getValue();
+
+                        this.logger.log(Level.INFO,command + " " + buffer.toString());
+                    }
+
+                    this.requestLock.unlock();
+
+                    if (command != null && !this.checkReserved(command)) {
+                        resPacket = this.read(command);
+                        this.write(command, buffer.array());
+                    }
+
+                } else {
+                    resPacket = this.readStream();
                 }
 
-                this.requestLock.unlock();
-
-                if(command != null && !this.checkReserved(command)) {
-                    String resPacket = streaming ? this.readStream() : this.read(command);
-                    if(resPacket != null){
-                        this.resultLock.lock();
+                if (resPacket != null) {
+                    this.resultLock.lock();
+                    this.logger.log(Level.INFO, resPacket);
+                    if(!streaming)
                         this.results.push(new AbstractMap.SimpleEntry<String, String>(command, resPacket));
-                        this.resultLock.unlock();
-                    }
-                    this.write(command, buffer.array());
+                    this.resultLock.unlock();
                 }
 
                 this.finishLock.lock();
@@ -206,7 +237,7 @@ public class ESPClientHandler implements Runnable{
                 }
                 this.finishLock.unlock();
 
-            } catch (Exception e){
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
