@@ -34,8 +34,8 @@ public class ESPClientHandler implements Runnable{
     private byte id;
 
     private Socket client;
-    private OutputStream clientOutputStream;
-    private InputStream clientInputStream;
+    private BufferedOutputStream clientOutputStream;
+    private BufferedInputStream clientInputStream;
 
     private HashMap<String, Byte> commands;
     private Queue<Map.Entry<String, ByteBuffer>> requests;
@@ -59,8 +59,8 @@ public class ESPClientHandler implements Runnable{
         this.client = client;
         try {
             this.client.setKeepAlive(true);
-            this.clientOutputStream = client.getOutputStream();
-            this.clientInputStream = client.getInputStream();
+            this.clientOutputStream = new BufferedOutputStream(client.getOutputStream(), 32);
+            this.clientInputStream = new BufferedInputStream(client.getInputStream());
 
             id = (byte) this.clientInputStream.read();
             this.streaming = (this.id & STREAM_MASK) < 0;
